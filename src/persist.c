@@ -83,8 +83,7 @@ static int persist__client_messages_write(struct mosquitto_db *db, FILE *db_fptr
 				&& cmsg->store->ref_count <= 1
 				&& cmsg->store->dest_id_count == 0){
 
-			/* This $SYS message won't have been persisted, so we can't persist
-			 * this client message. */
+			/* 这样的系统主题消息不进行保存*/
 			cmsg = cmsg->next;
 			continue;
 		}

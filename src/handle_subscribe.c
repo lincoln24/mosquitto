@@ -126,7 +126,7 @@ int handle__subscribe(struct mosquitto_db *db, struct mosquitto *context)
 			}
 
 			if(qos != 0x80){
-				rc2 = sub__add(db, context, sub, qos, &db->subs);
+				rc2 = sub__add(db, context, sub, qos, &db->subs);//添加主题及将客户端添加到主题中
 				if(rc2 == MOSQ_ERR_SUCCESS){
 					if(sub__retain_queue(db, context, sub, qos)) rc = 1;
 				}else if(rc2 != -1){

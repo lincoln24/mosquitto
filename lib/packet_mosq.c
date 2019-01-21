@@ -380,7 +380,7 @@ int packet__write(struct mosquitto *mosq)
 	return MOSQ_ERR_SUCCESS;
 }
 
-
+//从socket中读取一个数据包
 #ifdef WITH_BROKER
 int packet__read(struct mosquitto_db *db, struct mosquitto *mosq)
 #else
@@ -451,7 +451,7 @@ int packet__read(struct mosquitto *mosq)
 			read_length = net__read(mosq, &byte, 1);
 			if(read_length == 1){
 				mosq->in_packet.remaining_count--;
-				/* Max 4 bytes length for remaining length as defined by protocol.
+				/* 根据协议，剩余长度字节数最多为4字节
 				 * Anything more likely means a broken/malicious client.
 				 */
 				if(mosq->in_packet.remaining_count < -4) return MOSQ_ERR_PROTOCOL;
@@ -475,9 +475,8 @@ int packet__read(struct mosquitto *mosq)
 					}
 				}
 			}
-		}while((byte & 128) != 0);
-		/* We have finished reading remaining_length, so make remaining_count
-		 * positive. */
+		}while((byte & 128) != 0);//判断最高位若为1，则还未读完
+		/* 已经读完剩余长度，使remaining_count为正数 */
 		mosq->in_packet.remaining_count *= -1;
 
 		if(mosq->in_packet.remaining_length > 0){

@@ -25,7 +25,7 @@ Contributors:
 #include "sys_tree.h"
 #include "time_mosq.h"
 
-static int max_inflight = 20;
+static int max_inflight = 20;//规定最大正在交互的信息数量，因为正在交互的信息过多，可能会导致次序乱掉，因此要进行控制
 static unsigned long max_inflight_bytes = 0;
 static int max_queued = 100;
 static unsigned long max_queued_bytes = 0;
@@ -334,7 +334,7 @@ int db__message_delete(struct mosquitto_db *db, struct mosquitto *context, uint1
 
 	return MOSQ_ERR_SUCCESS;
 }
-
+//在某一客户端下插入消息
 int db__message_insert(struct mosquitto_db *db, struct mosquitto *context, uint16_t mid, enum mosquitto_msg_direction dir, int qos, bool retain, struct mosquitto_msg_store *stored)
 {
 	struct mosquitto_client_msg *msg;
@@ -776,7 +776,7 @@ int db__message_reconnect_reset(struct mosquitto_db *db, struct mosquitto *conte
 	return MOSQ_ERR_SUCCESS;
 }
 
-
+//将发送客户端保存的消息放出到各个接收客户端
 int db__message_release(struct mosquitto_db *db, struct mosquitto *context, uint16_t mid, enum mosquitto_msg_direction dir)
 {
 	struct mosquitto_client_msg *tail, *last = NULL;
@@ -906,7 +906,7 @@ int db__message_write(struct mosquitto_db *db, struct mosquitto *context)
 				rc = send__publish(context, mid, topic, payloadlen, payload, qos, retain, retries);
 				if(!rc){
 					tail->timestamp = mosquitto_time();
-					tail->dup = 1; /* Any retry attempts are a duplicate. */
+					tail->dup = 1; /* 任何再次发送都属于重发 */
 					tail->state = mosq_ms_wait_for_pubrec;
 				}else{
 					return rc;
@@ -954,11 +954,11 @@ int db__message_write(struct mosquitto_db *db, struct mosquitto *context)
 				break;
 		}
 	}
-
+	//等待消息队列中还有消息
 	while(context->queued_msgs && (max_inflight == 0 || msg_count < max_inflight)){
 		msg_count++;
-		tail = context->queued_msgs;
-		if(tail->direction == mosq_md_out){
+		tail = context->queued_msgs;//取出消息队列第一条消息
+		if(tail->direction == mosq_md_out){//是要发出的消息
 			switch(tail->qos){
 				case 0:
 					tail->state = mosq_ms_publish_qos0;
@@ -970,7 +970,7 @@ int db__message_write(struct mosquitto_db *db, struct mosquitto *context)
 					tail->state = mosq_ms_publish_qos2;
 					break;
 			}
-			db__message_dequeue_first(context);
+			db__message_dequeue_first(context);//将取出的消息放入inflight队列，并在等待消息队列中出列
 		}else{
 			if(tail->qos == 2){
 				tail->state = mosq_ms_send_pubrec;

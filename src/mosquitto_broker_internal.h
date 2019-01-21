@@ -213,7 +213,7 @@ struct mosquitto__listener {
 	uint16_t port;
 	char *host;
 	int max_connections;
-	char *mount_point;
+	char *mount_point;//该监听对应的主题前缀
 	mosq_sock_t *socks;
 	int sock_count;
 	int client_count;
@@ -283,21 +283,21 @@ struct mosquitto__config {
 #endif
 	struct mosquitto__security_options security_options;
 };
-
+//对某一topic的所有订阅者被组织成一个订阅列表，该订阅列表是一个双向链表，链表的每个节点都保存有一个订阅者,即该结构体
 struct mosquitto__subleaf {
 	struct mosquitto__subleaf *prev;
 	struct mosquitto__subleaf *next;
-	struct mosquitto *context;
+	struct mosquitto *context;//表示目前结构体所指向的订阅客户端
 	int qos;
 };
-
+//用于保存订阅树的节点（包括叶子节点和中间节点），mosquitto中对订阅树采用链表法的方式进行存储
 struct mosquitto__subhier {
 	UT_hash_handle hh;
 	struct mosquitto__subhier *parent;
-	struct mosquitto__subhier *children;
-	struct mosquitto__subleaf *subs;
-	struct mosquitto_msg_store *retained;
-	mosquitto__topic_element_uhpa topic;
+	struct mosquitto__subhier *children;/*该结点的孩子结点*/
+	struct mosquitto__subleaf *subs;/*该结点的订阅者链表*/
+	struct mosquitto_msg_store *retained;/*该主题结点的保留消息*/
+	mosquitto__topic_element_uhpa topic;//该节点对应的主题分段
 	uint16_t topic_len;
 };
 
@@ -311,29 +311,29 @@ struct mosquitto_msg_store{
 	struct mosquitto_msg_store *next;
 	struct mosquitto_msg_store *prev;
 	dbid_t db_id;
-	char *source_id;
-	char **dest_ids;
+	char *source_id;/*用来标识这个消息是哪一个客户端发布的,即发送端的id*/
+	char **dest_ids;/*用来标识这个消息应该发往哪些客户端*/
 	int dest_id_count;
-	int ref_count;
-	char* topic;
-	mosquitto__payload_uhpa payload;
+	int ref_count;/*引用次数，当引用次数为0，该消息将被移除并释放结点*/
+	char* topic;/*消息的主题*/
+	mosquitto__payload_uhpa payload;/*消息负载*/
 	uint32_t payloadlen;
-	uint16_t source_mid;
+	uint16_t source_mid;//发送端发过来的消息id
 	uint16_t mid;
-	uint8_t qos;
-	bool retain;
+	uint8_t qos;/*消息发布时的qos*/
+	bool retain;/*是否是保留消息*/
 };
-
+//存储着客户端发来和准备发往客户端的消息
 struct mosquitto_client_msg{
-	struct mosquitto_client_msg *next;
-	struct mosquitto_msg_store *store;
-	time_t timestamp;
-	uint16_t mid;
+	struct mosquitto_client_msg *next;/*下一个结点*/
+	struct mosquitto_msg_store *store;//存储该消息的具体内容
+	time_t timestamp;/*接收到消息的时间戳*/
+	uint16_t mid;/*消息的标识*/
 	uint8_t qos;
-	bool retain;
-	enum mosquitto_msg_direction direction;
-	enum mosquitto_msg_state state;
-	bool dup;
+	bool retain;/*是否需要保留*/
+	enum mosquitto_msg_direction direction;/*消息的方向，收到或者发出*/
+	enum mosquitto_msg_state state;//消息的状态
+	bool dup;/*是否是重复消息*/
 };
 
 struct mosquitto__unpwd{
@@ -360,20 +360,21 @@ struct mosquitto__acl_user{
 	char *username;
 	struct mosquitto__acl *acl;
 };
-
+//结构体struct mosquitto_db是mosquitto对所有内部数据的统一管理结构，可以认为是其内部的一个内存数据库。它保存了所有的客户端，所有客户端的订阅关系等等
 struct mosquitto_db{
 	dbid_t last_db_id;
-	struct mosquitto__subhier *subs;
+	struct mosquitto__subhier *subs;//订阅树的总树根,mosquitto中对所有的topic都在该订阅树中维护，客户端的订阅关系也在该订阅树中维护
 	struct mosquitto__unpwd *unpwd;
 	struct mosquitto__unpwd *psk_id;
-	struct mosquitto *contexts_by_id;
-	struct mosquitto *contexts_by_sock;
+	//用于存放所有客户端变量（类型为struct mosquitto）地址的数组，mosquitto程序中，所有的客户端都在此数组中保存
+	struct mosquitto *contexts_by_id;//通过id来查找的hash表
+	struct mosquitto *contexts_by_sock;//通过sock来查找的hash表
 	struct mosquitto *contexts_for_free;
 #ifdef WITH_BRIDGE
 	struct mosquitto **bridges;
 #endif
-	struct clientid__index_hash *clientid_index_hash;
-	struct mosquitto_msg_store *msg_store;
+	struct clientid__index_hash *clientid_index_hash;//保存一个hash表，该hash表可通过客户端的ID快速找到该客户端在数组contexts中的索引
+	struct mosquitto_msg_store *msg_store;/*存储消息的链表*/
 	struct mosquitto_msg_store_load *msg_store_load;
 #ifdef WITH_BRIDGE
 	int bridge_count;
@@ -381,14 +382,15 @@ struct mosquitto_db{
 	int msg_store_count;
 	unsigned long msg_store_bytes;
 	char *config_file;
-	struct mosquitto__config *config;
+	struct mosquitto__config *config;//保存mosquitto的所有配置信息
 	int auth_plugin_count;
 	bool verbose;
 #ifdef WITH_SYS_TREE
 	int subscription_count;
-	int retained_count;
+	int retained_count;//当前系统中retain标记的消息的条数
 #endif
 	int persistence_changes;
+	/*由于断开连接等需要释放的context存放的链表，将连接断开的客户端句柄先存放在该链表中，待到合适时统一释放*/
 	struct mosquitto *ll_for_free;
 #ifdef WITH_EPOLL
 	int epollfd;

@@ -152,7 +152,7 @@ int handle__connect(struct mosquitto_db *db, struct mosquitto *context)
 	/* Read protocol name as length then bytes rather than with read_string
 	 * because the length is fixed and we can check that. Removes the need
 	 * for another malloc as well. */
-	if(packet__read_uint16(&context->in_packet, &slen16)){
+	if(packet__read_uint16(&context->in_packet, &slen16)){//读取协议名的长度
 		rc = 1;
 		goto handle_connect_error;
 	}
@@ -161,13 +161,13 @@ int handle__connect(struct mosquitto_db *db, struct mosquitto *context)
 		rc = MOSQ_ERR_PROTOCOL;
 		goto handle_connect_error;
 	}
-	if(packet__read_bytes(&context->in_packet, protocol_name, slen)){
+	if(packet__read_bytes(&context->in_packet, protocol_name, slen)){//读取协议名
 		rc = MOSQ_ERR_PROTOCOL;
 		goto handle_connect_error;
 	}
 	protocol_name[slen] = '\0';
 
-	if(packet__read_byte(&context->in_packet, &protocol_version)){
+	if(packet__read_byte(&context->in_packet, &protocol_version)){//读取协议级别
 		rc = 1;
 		goto handle_connect_error;
 	}
@@ -177,7 +177,7 @@ int handle__connect(struct mosquitto_db *db, struct mosquitto *context)
 				log__printf(NULL, MOSQ_LOG_INFO, "Invalid protocol version %d in CONNECT from %s.",
 						protocol_version, context->address);
 			}
-			send__connack(context, 0, CONNACK_REFUSED_PROTOCOL_VERSION);
+			send__connack(context, 0, CONNACK_REFUSED_PROTOCOL_VERSION);//告知协议不支持
 			rc = MOSQ_ERR_PROTOCOL;
 			goto handle_connect_error;
 		}
@@ -207,7 +207,7 @@ int handle__connect(struct mosquitto_db *db, struct mosquitto *context)
 		goto handle_connect_error;
 	}
 
-	if(packet__read_byte(&context->in_packet, &connect_flags)){
+	if(packet__read_byte(&context->in_packet, &connect_flags)){//获取连接标志
 		rc = 1;
 		goto handle_connect_error;
 	}
@@ -217,7 +217,7 @@ int handle__connect(struct mosquitto_db *db, struct mosquitto *context)
 			goto handle_connect_error;
 		}
 	}
-
+	//获取连接标志的各个参数
 	clean_session = (connect_flags & 0x02) >> 1;
 	will = connect_flags & 0x04;
 	will_qos = (connect_flags & 0x18) >> 3;
@@ -231,12 +231,12 @@ int handle__connect(struct mosquitto_db *db, struct mosquitto *context)
 	password_flag = connect_flags & 0x40;
 	username_flag = connect_flags & 0x80;
 
-	if(packet__read_uint16(&context->in_packet, &(context->keepalive))){
+	if(packet__read_uint16(&context->in_packet, &(context->keepalive))){//读取超时时间
 		rc = 1;
 		goto handle_connect_error;
 	}
 
-	if(packet__read_string(&context->in_packet, &client_id, &slen)){
+	if(packet__read_string(&context->in_packet, &client_id, &slen)){//读取客户端id
 		rc = 1;
 		goto handle_connect_error;
 	}
@@ -246,7 +246,7 @@ int handle__connect(struct mosquitto_db *db, struct mosquitto *context)
 			send__connack(context, 0, CONNACK_REFUSED_IDENTIFIER_REJECTED);
 			rc = MOSQ_ERR_PROTOCOL;
 			goto handle_connect_error;
-		}else{ /* mqtt311 */
+		}else{ /* mqtt311 若客户端id长度为0，可以分配一个id给他*/
 			mosquitto__free(client_id);
 			client_id = NULL;
 
@@ -256,7 +256,7 @@ int handle__connect(struct mosquitto_db *db, struct mosquitto *context)
 			}else{
 				allow_zero_length_clientid = db->config->security_options.allow_zero_length_clientid;
 			}
-			if(clean_session == 0 || allow_zero_length_clientid == false){
+			if(clean_session == 0 || allow_zero_length_clientid == false){//客户端id长度为0，清除会话必须置1
 				send__connack(context, 0, CONNACK_REFUSED_IDENTIFIER_REJECTED);
 				rc = MOSQ_ERR_PROTOCOL;
 				goto handle_connect_error;
@@ -288,7 +288,7 @@ int handle__connect(struct mosquitto_db *db, struct mosquitto *context)
 		goto handle_connect_error;
 	}
 
-	if(will){
+	if(will){//需要建立遗嘱
 		will_struct = mosquitto__calloc(1, sizeof(struct mosquitto_message));
 		if(!will_struct){
 			rc = MOSQ_ERR_NOMEM;
@@ -335,7 +335,7 @@ int handle__connect(struct mosquitto_db *db, struct mosquitto *context)
 			goto handle_connect_error;
 		}
 		if(will_payloadlen > 0){
-			will_payload = mosquitto__malloc(will_payloadlen);
+			will_payload = mosquitto__malloc(will_payloadlen);//具体的遗嘱消息
 			if(!will_payload){
 				rc = 1;
 				goto handle_connect_error;
@@ -357,7 +357,7 @@ int handle__connect(struct mosquitto_db *db, struct mosquitto *context)
 	}
 
 	if(username_flag){
-		rc = packet__read_string(&context->in_packet, &username, &slen);
+		rc = packet__read_string(&context->in_packet, &username, &slen);//读取用户名
 		if(rc == MOSQ_ERR_SUCCESS){
 			if(mosquitto_validate_utf8(username, slen) != MOSQ_ERR_SUCCESS){
 				rc = MOSQ_ERR_PROTOCOL;
@@ -365,7 +365,7 @@ int handle__connect(struct mosquitto_db *db, struct mosquitto *context)
 			}
 
 			if(password_flag){
-				rc = packet__read_string(&context->in_packet, &password, &slen);
+				rc = packet__read_string(&context->in_packet, &password, &slen);//读取密码
 				if(rc == MOSQ_ERR_NOMEM){
 					rc = MOSQ_ERR_NOMEM;
 					goto handle_connect_error;
@@ -558,16 +558,15 @@ int handle__connect(struct mosquitto_db *db, struct mosquitto *context)
 		}
 	}
 
-	/* Find if this client already has an entry. This must be done *after* any security checks. */
+	/* 找出这个客户端是不是已经可以通过id来查找，这一步必须在安全检查之后进行 */
 	HASH_FIND(hh_id, db->contexts_by_id, client_id, strlen(client_id), found_context);
 	if(found_context){
-		/* Found a matching client */
+		/* 找到一个符合的客户端 */
 		if(found_context->sock == INVALID_SOCKET){
-			/* Client is reconnecting after a disconnect */
+			/* 该客户端是断开重连的 */
 			/* FIXME - does anything need to be done here? */
 		}else{
-			/* Client is already connected, disconnect old version. This is
-			 * done in context__cleanup() below. */
+			/* 这个客户端已经连上了，先断开之前的连接,这通过下面的context__cleanup()完成 */
 			if(db->config->connection_messages == true){
 				log__printf(NULL, MOSQ_LOG_ERR, "Client %s already connected, closing old connection.", client_id);
 			}
@@ -622,17 +621,17 @@ int handle__connect(struct mosquitto_db *db, struct mosquitto *context)
 	}else{
 		security_opts = &db->config->security_options;
 	}
-
+	//若存在访问控制列表
 	if(security_opts->acl_list){
 		acl_tail = security_opts->acl_list;
 		while(acl_tail){
-			if(context->username){
+			if(context->username){//若需要用户名，则判断用户名与访问控制列表的用户名是否一致
 				if(acl_tail->username && !strcmp(context->username, acl_tail->username)){
-					context->acl_list = acl_tail;
+					context->acl_list = acl_tail;//控制列表中有用户名且与该客户端一致
 					break;
 				}
 			}else{
-				if(acl_tail->username == NULL){
+				if(acl_tail->username == NULL){//控制列表中无用户名
 					context->acl_list = acl_tail;
 					break;
 				}

@@ -36,7 +36,7 @@ int handle__publish(struct mosquitto_db *db, struct mosquitto *context)
 	mosquitto__payload_uhpa payload;
 	uint32_t payloadlen;
 	uint8_t dup, qos, retain;
-	uint16_t mid = 0;
+	uint16_t mid = 0;//这条消息的报文标识符
 	int rc = 0;
 	uint8_t header = context->in_packet.command;
 	int res = 0;
@@ -60,7 +60,7 @@ int handle__publish(struct mosquitto_db *db, struct mosquitto *context)
 				"Invalid QoS in PUBLISH from %s, disconnecting.", context->id);
 		return 1;
 	}
-	retain = (header & 0x01);
+	retain = (header & 0x01);//消息的retain字段是否被设置
 
 	if(packet__read_string(&context->in_packet, &topic, &slen)) return 1;
 	if(!slen){
@@ -128,7 +128,7 @@ int handle__publish(struct mosquitto_db *db, struct mosquitto *context)
 		return 1;
 	}
 
-	if(qos > 0){
+	if(qos > 0){//读取报文标识符
 		if(packet__read_uint16(&context->in_packet, &mid)){
 			mosquitto__free(topic);
 			return 1;
@@ -184,6 +184,7 @@ int handle__publish(struct mosquitto_db *db, struct mosquitto *context)
 	}
 	if(!stored){
 		dup = 0;
+		//把消息存到了db->msg_store当中
 		if(db__message_store(db, context->id, mid, topic, qos, payloadlen, &payload, retain, &stored, 0)){
 			return 1;
 		}

@@ -45,7 +45,7 @@ int handle__unsubscribe(struct mosquitto_db *db, struct mosquitto *context)
 			return MOSQ_ERR_PROTOCOL;
 		}
 	}
-	if(packet__read_uint16(&context->in_packet, &mid)) return 1;
+	if(packet__read_uint16(&context->in_packet, &mid)) return 1;//获取该消息报文标识符
 
 	if(context->protocol == mosq_p_mqtt311){
 		if(context->in_packet.pos == context->in_packet.remaining_length){

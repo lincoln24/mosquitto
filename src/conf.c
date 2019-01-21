@@ -253,7 +253,7 @@ static void config__cleanup_plugins(struct mosquitto__config *config)
 	}
 }
 
-
+//参数config的各结构体成员的初始化工作
 void config__init(struct mosquitto_db *db, struct mosquitto__config *config)
 {
 	memset(config, 0, sizeof(struct mosquitto__config));
@@ -265,7 +265,7 @@ void config__init(struct mosquitto_db *db, struct mosquitto__config *config)
 	config->default_listener.protocol = mp_mqtt;
 	config->default_listener.security_options.allow_anonymous = -1;
 }
-
+//对参数config的各成员的清除、释放等操作
 void config__cleanup(struct mosquitto__config *config)
 {
 	int i;
@@ -376,7 +376,7 @@ static void print_usage(void)
 	printf("      any logging options given in the config file.\n");
 	printf("\nSee http://mosquitto.org/ for more information.\n\n");
 }
-
+//对用户输出参数的解析工作
 int config__parse_args(struct mosquitto_db *db, struct mosquitto__config *config, int argc, char *argv[])
 {
 	int i;
@@ -577,7 +577,7 @@ void config__copy(struct mosquitto__config *src, struct mosquitto__config *dest)
 #endif
 }
 
-
+//从配置文件中读取各配置参数到结构体config中，具体的配置文件读取工作由函数config__read_file完成
 int config__read(struct mosquitto_db *db, struct mosquitto__config *config, bool reload)
 {
 	int rc = MOSQ_ERR_SUCCESS;

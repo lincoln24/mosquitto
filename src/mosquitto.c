@@ -298,7 +298,7 @@ int main(int argc, char *argv[])
 	listensock_index = 0;
 	for(i=0; i<config.listener_count; i++){
 		if(config.listeners[i].protocol == mp_mqtt){
-			if(net__socket_listen(&config.listeners[i])){
+			if(net__socket_listen(&config.listeners[i])){//打开监听端口
 				db__close(&int_db);
 				if(config.pid_file){
 					remove(config.pid_file);
@@ -322,6 +322,7 @@ int main(int argc, char *argv[])
 					}
 					return 1;
 				}
+				//将SOCK套接字放在局部变量listensock里面，以便后面统一使用
 				listensock[listensock_index] = config.listeners[i].socks[j];
 				if(listensock[listensock_index] > listener_max){
 					listener_max = listensock[listensock_index];

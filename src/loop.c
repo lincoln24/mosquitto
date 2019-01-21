@@ -169,9 +169,9 @@ int mosquitto_main_loop(struct mosquitto_db *db, mosq_sock_t *listensock, int li
 	}
 	memset(&ev, 0, sizeof(struct epoll_event));
 	memset(&events, 0, sizeof(struct epoll_event)*MAX_EVENTS);
-	for(i=0; i<listensock_count; i++){
+	for(i=0; i<listensock_count; i++){//注册监听sock的可读事件。也就是新连接事件
 		ev.data.fd = listensock[i];
-		ev.events = EPOLLIN;
+		ev.events = EPOLLIN;//添加事件：有新连接/有数据进入
 		if (epoll_ctl(db->epollfd, EPOLL_CTL_ADD, listensock[i], &ev) == -1) {
 			log__printf(NULL, MOSQ_LOG_ERR, "Error in epoll initial registering: %s", strerror(errno));
 			(void)close(db->epollfd);
@@ -219,7 +219,7 @@ int mosquitto_main_loop(struct mosquitto_db *db, mosq_sock_t *listensock, int li
 		now_time = time(NULL);
 
 		time_count = 0;
-		HASH_ITER(hh_sock, db->contexts_by_sock, context, ctxt_tmp){
+		HASH_ITER(hh_sock, db->contexts_by_sock, context, ctxt_tmp){//循环取出客户端结构体
 			if(time_count > 0){
 				time_count--;
 			}else{
@@ -277,13 +277,16 @@ int mosquitto_main_loop(struct mosquitto_db *db, mosq_sock_t *listensock, int li
 				if(!(context->keepalive)
 						|| context->bridge
 						|| now - context->last_msg_in <= (time_t)(context->keepalive)*3/2){
-
+					//在进入poll等待之前，先整理队列
 					if(db__message_write(db, context) == MOSQ_ERR_SUCCESS){
 #ifdef WITH_EPOLL
+						//有正要发送的包
 						if(context->current_out_packet || context->state == mosq_cs_connect_pending || context->ws_want_write){
-							if(!(context->events & EPOLLOUT)) {
+							if(!(context->events & EPOLLOUT)) {//该客户端写入事件还未就绪
 								ev.data.fd = context->sock;
-								ev.events = EPOLLIN | EPOLLOUT;
+								ev.events = EPOLLIN | EPOLLOUT;//将客户端置为可读可写
+								/*默认用add的方式去修改该context的事件，add不了的话说明之前已添加，
+								下面会调用mod的方式修改,用这种方式就不必管是否有添加过，是一个通用的做法*/
 								if(epoll_ctl(db->epollfd, EPOLL_CTL_ADD, context->sock, &ev) == -1) {
 									if((errno != EEXIST)||(epoll_ctl(db->epollfd, EPOLL_CTL_MOD, context->sock, &ev) == -1)) {
 											log__printf(NULL, MOSQ_LOG_DEBUG, "Error in epoll re-registering to EPOLLOUT: %s", strerror(errno));
@@ -291,12 +294,12 @@ int mosquitto_main_loop(struct mosquitto_db *db, mosq_sock_t *listensock, int li
 								}
 								context->events = EPOLLIN | EPOLLOUT;
 							}
-							context->ws_want_write = false;
+							context->ws_want_write = false;//该变量用于websockets
 						}
 						else{
-							if(context->events & EPOLLOUT) {
+							if(context->events & EPOLLOUT) {//若客户端没有要发送的包且该客户端支持写入
 								ev.data.fd = context->sock;
-								ev.events = EPOLLIN;
+								ev.events = EPOLLIN;//将客户端置为只读
 								if(epoll_ctl(db->epollfd, EPOLL_CTL_ADD, context->sock, &ev) == -1) {
 									if((errno != EEXIST)||(epoll_ctl(db->epollfd, EPOLL_CTL_MOD, context->sock, &ev) == -1)) {
 											log__printf(NULL, MOSQ_LOG_DEBUG, "Error in epoll re-registering to EPOLLIN: %s", strerror(errno));
@@ -316,10 +319,10 @@ int mosquitto_main_loop(struct mosquitto_db *db, mosq_sock_t *listensock, int li
 						context->pollfd_index = pollfd_index;
 						pollfd_index++;
 #endif
-					}else{
+					}else{//尝试发送失败，连接出问题
 						do_disconnect(db, context);
 					}
-				}else{
+				}else{//超过1.5倍的时间，超时关闭连接
 					if(db->config->connection_messages == true){
 						if(context->id){
 							id = context->id;
@@ -329,7 +332,7 @@ int mosquitto_main_loop(struct mosquitto_db *db, mosq_sock_t *listensock, int li
 						log__printf(NULL, MOSQ_LOG_NOTICE, "Client %s has exceeded timeout, disconnecting.", id);
 					}
 					/* Client has exceeded keepalive*1.5 */
-					do_disconnect(db, context);
+					do_disconnect(db, context);//关闭连接，清空数据,对应的sock置为INVALID_SOCKET
 				}
 			}
 		}
@@ -390,7 +393,7 @@ int mosquitto_main_loop(struct mosquitto_db *db, mosq_sock_t *listensock, int li
 									}
 									context->pollfd_index = pollfd_index;
 									pollfd_index++;
-#endif
+#endif //371：end of ifdef with_epoll
 								}else if(rc == MOSQ_ERR_CONN_PENDING){
 									context->bridge->restart_t = 0;
 								}else{
@@ -468,8 +471,10 @@ int mosquitto_main_loop(struct mosquitto_db *db, mosq_sock_t *listensock, int li
 				}
 			}
 		}
-#endif
+#endif //337 end of ifdef with_bridge
 		now_time = time(NULL);
+		/*协议规定持久连接(clean_session为false)的状态必须永久保存，这里避免连接永远无法删除，增加这个超时选项
+		也就是如果一个客户端断开连接一段时间了，那么我们会主动干掉他*/
 		if(db->config->persistent_client_expiration > 0 && now_time > expiration_check_time){
 			HASH_ITER(hh_id, db->contexts_by_id, context, ctxt_tmp){
 				if(context->sock == INVALID_SOCKET && context->clean_session == 0){
@@ -520,7 +525,7 @@ int mosquitto_main_loop(struct mosquitto_db *db, mosq_sock_t *listensock, int li
 				for(j=0; j<listensock_count; j++){
 					if (events[i].data.fd == listensock[j]) {
 						if (events[i].events & (EPOLLIN | EPOLLPRI)){
-							while((ev.data.fd = net__socket_accept(db, listensock[j])) != -1){
+							while((ev.data.fd = net__socket_accept(db, listensock[j])) != -1){//接受新连接，里面会初始化客户端
 								ev.events = EPOLLIN;
 								if (epoll_ctl(db->epollfd, EPOLL_CTL_ADD, ev.data.fd, &ev) == -1) {
 									log__printf(NULL, MOSQ_LOG_ERR, "Error in epoll accepting: %s", strerror(errno));
@@ -537,7 +542,7 @@ int mosquitto_main_loop(struct mosquitto_db *db, mosq_sock_t *listensock, int li
 					}
 				}
 				if (j == listensock_count) {
-					loop_handle_reads_writes(db, events[i].data.fd, events[i].events);
+					loop_handle_reads_writes(db, events[i].data.fd, events[i].events);//处理新事件
 				}
 			}
 		}
@@ -650,7 +655,7 @@ void do_disconnect(struct mosquitto_db *db, struct mosquitto *context)
 			context->id = NULL;
 		}
 	}else
-#endif
+#endif //end of with_websockets
 	{
 		if(db->config->connection_messages == true){
 			if(context->id){
@@ -740,7 +745,7 @@ static void loop_handle_reads_writes(struct mosquitto_db *db, struct pollfd *pol
 #endif
 			continue;
 		}
-#endif
+#endif //endof with_websockets
 
 #ifdef WITH_TLS
 #ifdef WITH_EPOLL
@@ -752,7 +757,7 @@ static void loop_handle_reads_writes(struct mosquitto_db *db, struct pollfd *pol
 				(context->ssl && context->state == mosq_cs_new)){
 #else
 #ifdef WITH_EPOLL
-		if(events & EPOLLOUT){
+		if(events & EPOLLOUT){//若是写入事件
 #else			
 		if(pollfds[context->pollfd_index].revents & POLLOUT){
 #endif

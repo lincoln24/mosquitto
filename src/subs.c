@@ -60,7 +60,7 @@ struct sub__token {
 	mosquitto__topic_element_uhpa topic;
 	uint16_t topic_len;
 };
-
+//处理某一主题下的所有订阅客户端
 static int subs__process(struct mosquitto_db *db, struct mosquitto__subhier *hier, const char *source_id, const char *topic, int qos, int retain, struct mosquitto_msg_store *stored, bool set_retain)
 {
 	int rc = 0;
@@ -80,8 +80,8 @@ static int subs__process(struct mosquitto_db *db, struct mosquitto__subhier *hie
 			db->persistence_changes++;
 		}
 #endif
-		if(hier->retained){
-			db__msg_store_deref(db, &hier->retained);
+		if(hier->retained){//该主题已经有保留消息
+			db__msg_store_deref(db, &hier->retained);//删除掉该消息
 #ifdef WITH_SYS_TREE
 			db->retained_count--;
 #endif
@@ -96,7 +96,7 @@ static int subs__process(struct mosquitto_db *db, struct mosquitto__subhier *hie
 			hier->retained = NULL;
 		}
 	}
-	while(source_id && leaf){
+	while(source_id && leaf){//客户端id存在，且该主题下目前所指向的订阅客户端非空
 		if(!leaf->context->id || (leaf->context->is_bridge && !strcmp(leaf->context->id, source_id))){
 			leaf = leaf->next;
 			continue;
@@ -119,7 +119,7 @@ static int subs__process(struct mosquitto_db *db, struct mosquitto__subhier *hie
 				}
 			}
 			if(msg_qos){
-				mid = mosquitto__mid_generate(leaf->context);
+				mid = mosquitto__mid_generate(leaf->context);//发到接收客户端的消息id是自动生成的
 			}else{
 				mid = 0;
 			}
@@ -244,7 +244,7 @@ static void sub__topic_tokens_free(struct sub__token *tokens)
 		tokens = tail;
 	}
 }
-
+//递归查找主题，若不存在节点则添加，直到最后一层，将客户端加入到订阅列表中
 static int sub__add_recurse(struct mosquitto_db *db, struct mosquitto *context, int qos, struct mosquitto__subhier *subhier, struct sub__token *tokens)
 	/* FIXME - this function has the potential to leak subhier, audit calling functions. */
 {
@@ -383,7 +383,7 @@ static void sub__search(struct mosquitto_db *db, struct mosquitto__subhier *subh
 		sr = set_retain;
 
 		if(tokens && UHPA_ACCESS_TOPIC(tokens)
-					&& (!strcmp(UHPA_ACCESS_TOPIC(branch), UHPA_ACCESS_TOPIC(tokens))
+					&& (!strcmp(UHPA_ACCESS_TOPIC(branch), UHPA_ACCESS_TOPIC(tokens))//该branch节点与主题名吻合
 					|| !strcmp(UHPA_ACCESS_TOPIC(branch), "+"))){
 			/* The topic matches this subscription.
 			 * Doesn't include # wildcards */
@@ -497,7 +497,7 @@ int sub__remove(struct mosquitto_db *db, struct mosquitto *context, const char *
 
 	return rc;
 }
-
+//根据主题将消息添加到该主题的所有订阅客户端中
 int sub__messages_queue(struct mosquitto_db *db, const char *source_id, const char *topic, int qos, int retain, struct mosquitto_msg_store **stored)
 {
 	int rc = 0;
@@ -509,18 +509,14 @@ int sub__messages_queue(struct mosquitto_db *db, const char *source_id, const ch
 
 	if(sub__topic_tokenise(topic, &tokens)) return 1;
 
-	/* Protect this message until we have sent it to all
-	clients - this is required because websockets client calls
-	db__message_write(), which could remove the message if ref_count==0.
-	*/
+	/* 在发送给所有客户端之前，保存此信息。
+	因为当ref_count=0时，会删除该消息*/
 	(*stored)->ref_count++;
 
 	HASH_FIND(hh, db->subs, UHPA_ACCESS_TOPIC(tokens), tokens->topic_len, subhier);
-	if(subhier){
+	if(subhier){//找到了该主题的树节点
 		if(retain){
-			/* We have a message that needs to be retained, so ensure that the subscription
-			 * tree for its topic exists.
-			 */
+			/* 因为有消息需要保留，所以要确保订阅树的主题存在 */
 			sub__add_recurse(db, NULL, 0, subhier, tokens);
 		}
 		sub__search(db, subhier, tokens, source_id, topic, qos, retain, *stored, true);
@@ -682,30 +678,30 @@ static int retain__search(struct mosquitto_db *db, struct mosquitto__subhier *su
 		/* Subscriptions with wildcards in aren't really valid topics to publish to
 		 * so they can't have retained messages.
 		 */
-		if(!strcmp(UHPA_ACCESS_TOPIC(tokens), "#") && !tokens->next){
+		if(!strcmp(UHPA_ACCESS_TOPIC(tokens), "#") && !tokens->next){//若该主题的这一层为#
 			/* Set flag to indicate that we should check for retained messages
 			 * on "foo" when we are subscribing to e.g. "foo/#" and then exit
 			 * this function and return to an earlier retain__search().
 			 */
 			flag = -1;
-			if(branch->retained){
+			if(branch->retained){//若该主题节点有保留消息，就进行处理
 				retain__process(db, branch->retained, context, sub, sub_qos);
 			}
-			if(branch->children){
+			if(branch->children){//若该主题节点还有孩子，则还要进入孩子继续检索
 				retain__search(db, branch, tokens, context, sub, sub_qos, level+1);
 			}
 		}else if(strcmp(UHPA_ACCESS_TOPIC(branch), "+")
 					&& (!strcmp(UHPA_ACCESS_TOPIC(branch), UHPA_ACCESS_TOPIC(tokens))
 					|| !strcmp(UHPA_ACCESS_TOPIC(tokens), "+"))){
-			if(tokens->next){
-				if(retain__search(db, branch, tokens->next, context, sub, sub_qos, level+1) == -1
+			if(tokens->next){//主题还有下一层，继续搜
+				if(retain__search(db, branch, tokens->next, context, sub, sub_qos, level+1) == -1//后面的主题有#
 						|| (!branch_tmp && tokens->next && !strcmp(UHPA_ACCESS_TOPIC(tokens->next), "#") && level>0)){
 
 					if(branch->retained){
 						retain__process(db, branch->retained, context, sub, sub_qos);
 					}
 				}
-			}else{
+			}else{//主题已到最后一层，进行处理
 				if(branch->retained){
 					retain__process(db, branch->retained, context, sub, sub_qos);
 				}

@@ -70,12 +70,12 @@ static void sys_tree__update_clients(struct mosquitto_db *db, char *buf)
 
 	if(client_count != count_total){
 		client_count = count_total;
-		snprintf(buf, BUFLEN, "%d", client_count);
+		snprintf(buf, BUFLEN, "%d", client_count);//有效和无效连接、注册到服务器上的总数
 		db__messages_easy_queue(db, NULL, "$SYS/broker/clients/total", SYS_TREE_QOS, strlen(buf), buf, 1);
 
 		if(client_count > client_max){
 			client_max = client_count;
-			snprintf(buf, BUFLEN, "%d", client_max);
+			snprintf(buf, BUFLEN, "%d", client_max);//服务器同一时间连接的最大客户端数量
 			db__messages_easy_queue(db, NULL, "$SYS/broker/clients/maximum", SYS_TREE_QOS, strlen(buf), buf, 1);
 		}
 	}
@@ -88,20 +88,20 @@ static void sys_tree__update_clients(struct mosquitto_db *db, char *buf)
 			 * count_total, causing a negative number. This situation should
 			 * not last for long, so just cap at zero and ignore. */
 			disconnected_count = 0;
-		}
+		}//注册到服务器上的持久连接（clean seesion为false)但当前断开的客户端数量
 		snprintf(buf, BUFLEN, "%d", disconnected_count);
 		db__messages_easy_queue(db, NULL, "$SYS/broker/clients/inactive", SYS_TREE_QOS, strlen(buf), buf, 1);
 		db__messages_easy_queue(db, NULL, "$SYS/broker/clients/disconnected", SYS_TREE_QOS, strlen(buf), buf, 1);
 	}
 	if(connected_count != count_by_sock){
 		connected_count = count_by_sock;
-		snprintf(buf, BUFLEN, "%d", connected_count);
+		snprintf(buf, BUFLEN, "%d", connected_count);//当前连接的客户端数量
 		db__messages_easy_queue(db, NULL, "$SYS/broker/clients/active", SYS_TREE_QOS, strlen(buf), buf, 1);
 		db__messages_easy_queue(db, NULL, "$SYS/broker/clients/connected", SYS_TREE_QOS, strlen(buf), buf, 1);
 	}
 	if(g_clients_expired != clients_expired){
-		clients_expired = g_clients_expired;
-		snprintf(buf, BUFLEN, "%d", clients_expired);
+		clients_expired = g_clients_expired;//超过有效期被断开连接的客户端数量
+		snprintf(buf, BUFLEN, "%d", clients_expired);//有效期通过persistent_client_expiration设置
 		db__messages_easy_queue(db, NULL, "$SYS/broker/clients/expired", SYS_TREE_QOS, strlen(buf), buf, 1);
 	}
 }
@@ -116,13 +116,13 @@ static void sys_tree__update_memory(struct mosquitto_db *db, char *buf)
 	value_ul = mosquitto__memory_used();
 	if(current_heap != value_ul){
 		current_heap = value_ul;
-		snprintf(buf, BUFLEN, "%lu", current_heap);
+		snprintf(buf, BUFLEN, "%lu", current_heap);//正在使用的堆内存大小
 		db__messages_easy_queue(db, NULL, "$SYS/broker/heap/current", SYS_TREE_QOS, strlen(buf), buf, 1);
 	}
-	value_ul =mosquitto__max_memory_used();
+	value_ul = mosquitto__max_memory_used();
 	if(max_heap != value_ul){
 		max_heap = value_ul;
-		snprintf(buf, BUFLEN, "%lu", max_heap);
+		snprintf(buf, BUFLEN, "%lu", max_heap);//使用的最大堆内存
 		db__messages_easy_queue(db, NULL, "$SYS/broker/heap/maximum", SYS_TREE_QOS, strlen(buf), buf, 1);
 	}
 }
@@ -217,7 +217,7 @@ void sys_tree__update(struct mosquitto_db *db, int interval, time_t start_time)
 
 	if(interval && now - interval > last_update){
 		uptime = now - start_time;
-		snprintf(buf, BUFLEN, "%d seconds", (int)uptime);
+		snprintf(buf, BUFLEN, "%d seconds", (int)uptime);//服务器启动时长
 		db__messages_easy_queue(db, NULL, "$SYS/broker/uptime", SYS_TREE_QOS, strlen(buf), buf, 1);
 
 		sys_tree__update_clients(db, buf);
@@ -246,15 +246,21 @@ void sys_tree__update(struct mosquitto_db *db, int interval, time_t start_time)
 
 			/* 1 minute load */
 			exponent = exp(-1.0*(now-last_update)/60.0);
-
+			//1分钟内服务器接收到的所有类型消息的平均数
 			calc_load(db, buf, "$SYS/broker/load/messages/received/1min", initial_publish, exponent, msgs_received_interval, &msgs_received_load1);
 			calc_load(db, buf, "$SYS/broker/load/messages/sent/1min", initial_publish, exponent, msgs_sent_interval, &msgs_sent_load1);
+			//1分钟内服务器丢弃的消息的平均数，这表明了那些持久连接但与服务器断开的客户端失去消息的速率
 			calc_load(db, buf, "$SYS/broker/load/publish/dropped/1min", initial_publish, exponent, publish_dropped_interval, &publish_dropped_load1);
+			//1分钟内服务器接收的发布消息的平均数
 			calc_load(db, buf, "$SYS/broker/load/publish/received/1min", initial_publish, exponent, publish_received_interval, &publish_received_load1);
+			//1分钟内服务器发送的发布消息的平均数
 			calc_load(db, buf, "$SYS/broker/load/publish/sent/1min", initial_publish, exponent, publish_sent_interval, &publish_sent_load1);
+			//1分钟内服务器接收数据的平均字节数，以下类似
 			calc_load(db, buf, "$SYS/broker/load/bytes/received/1min", initial_publish, exponent, bytes_received_interval, &bytes_received_load1);
 			calc_load(db, buf, "$SYS/broker/load/bytes/sent/1min", initial_publish, exponent, bytes_sent_interval, &bytes_sent_load1);
+			//1分钟内服务器打开的socket连接的平均数
 			calc_load(db, buf, "$SYS/broker/load/sockets/1min", initial_publish, exponent, socket_interval, &socket_load1);
+			//1分钟内服务器接收到的connections包的平均数
 			calc_load(db, buf, "$SYS/broker/load/connections/1min", initial_publish, exponent, connection_interval, &connection_load1);
 
 			/* 5 minute load */
@@ -285,8 +291,8 @@ void sys_tree__update(struct mosquitto_db *db, int interval, time_t start_time)
 		}
 
 		if(db->msg_store_count != msg_store_count){
-			msg_store_count = db->msg_store_count;
-			snprintf(buf, BUFLEN, "%d", msg_store_count);
+			msg_store_count = db->msg_store_count;//服务器存储的消息的总数
+			snprintf(buf, BUFLEN, "%d", msg_store_count);//包括保留消息和持久连接客户端的消息队列中的消息数
 			db__messages_easy_queue(db, NULL, "$SYS/broker/messages/stored", SYS_TREE_QOS, strlen(buf), buf, 1);
 			db__messages_easy_queue(db, NULL, "$SYS/broker/store/messages/count", SYS_TREE_QOS, strlen(buf), buf, 1);
 		}
@@ -299,13 +305,13 @@ void sys_tree__update(struct mosquitto_db *db, int interval, time_t start_time)
 
 		if(db->subscription_count != subscription_count){
 			subscription_count = db->subscription_count;
-			snprintf(buf, BUFLEN, "%d", subscription_count);
+			snprintf(buf, BUFLEN, "%d", subscription_count);//服务器订阅主题总数
 			db__messages_easy_queue(db, NULL, "$SYS/broker/subscriptions/count", SYS_TREE_QOS, strlen(buf), buf, 1);
 		}
 
 		if(db->retained_count != retained_count){
 			retained_count = db->retained_count;
-			snprintf(buf, BUFLEN, "%d", retained_count);
+			snprintf(buf, BUFLEN, "%d", retained_count);//服务器保留的消息总数
 			db__messages_easy_queue(db, NULL, "$SYS/broker/retained messages/count", SYS_TREE_QOS, strlen(buf), buf, 1);
 		}
 
@@ -315,30 +321,30 @@ void sys_tree__update(struct mosquitto_db *db, int interval, time_t start_time)
 
 		if(msgs_received != g_msgs_received){
 			msgs_received = g_msgs_received;
-			snprintf(buf, BUFLEN, "%lu", msgs_received);
+			snprintf(buf, BUFLEN, "%lu", msgs_received);//自服务器启动以来接收的所有类型的消息总数
 			db__messages_easy_queue(db, NULL, "$SYS/broker/messages/received", SYS_TREE_QOS, strlen(buf), buf, 1);
 		}
 		
 		if(msgs_sent != g_msgs_sent){
 			msgs_sent = g_msgs_sent;
-			snprintf(buf, BUFLEN, "%lu", msgs_sent);
+			snprintf(buf, BUFLEN, "%lu", msgs_sent);//自服务器启动以来发送的所有类型的消息总数
 			db__messages_easy_queue(db, NULL, "$SYS/broker/messages/sent", SYS_TREE_QOS, strlen(buf), buf, 1);
 		}
 
 		if(publish_dropped != g_msgs_dropped){
-			publish_dropped = g_msgs_dropped;
+			publish_dropped = g_msgs_dropped;//由于inflight/queued限制而直接丢弃的消息的总数
 			snprintf(buf, BUFLEN, "%lu", publish_dropped);
 			db__messages_easy_queue(db, NULL, "$SYS/broker/publish/messages/dropped", SYS_TREE_QOS, strlen(buf), buf, 1);
 		}
 
 		if(pub_msgs_received != g_pub_msgs_received){
-			pub_msgs_received = g_pub_msgs_received;
+			pub_msgs_received = g_pub_msgs_received;//自服务器启动以来接收的发布消息的总数
 			snprintf(buf, BUFLEN, "%lu", pub_msgs_received);
 			db__messages_easy_queue(db, NULL, "$SYS/broker/publish/messages/received", SYS_TREE_QOS, strlen(buf), buf, 1);
 		}
 		
 		if(pub_msgs_sent != g_pub_msgs_sent){
-			pub_msgs_sent = g_pub_msgs_sent;
+			pub_msgs_sent = g_pub_msgs_sent;//自服务器启动以来发送的发布消息的总数
 			snprintf(buf, BUFLEN, "%lu", pub_msgs_sent);
 			db__messages_easy_queue(db, NULL, "$SYS/broker/publish/messages/sent", SYS_TREE_QOS, strlen(buf), buf, 1);
 		}

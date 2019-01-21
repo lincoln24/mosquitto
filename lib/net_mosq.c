@@ -12,6 +12,8 @@ and the Eclipse Distribution License is available at
 
 Contributors:
    Roger Light - initial implementation and documentation.
+
+   网络基础操作，tcp创建，关闭等
 */
 
 #define _GNU_SOURCE

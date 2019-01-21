@@ -12,14 +12,18 @@ and the Eclipse Distribution License is available at
  
 Contributors:
    Roger Light - initial implementation and documentation.
-*/
 
+   对内存操作的封装文件，实现了对常用的内存申请与释放相关的系统调用函数
+   如果文件中定义了宏REAL_WITH_MEMORY_TRACKING，则这些封装函数只是对系统函数进行封装，不做任何额外操作
+   如果定义了REAL_WITH_MEMORY_TRACKING宏，则会在内存申请和释放时分别记录所申请或释放内存的大小
+*/
 #include "config.h"
 
 #include <stdlib.h>
 #include <string.h>
 
 #include "memory_mosq.h"
+// #include "mosquitto_broker_internal.h"
 
 #ifdef REAL_WITH_MEMORY_TRACKING
 #  if defined(__APPLE__)
@@ -55,7 +59,7 @@ void memory__set_limit(size_t lim)
 #endif
 }
 #endif
-
+//对系统函数calloc的封装
 void *mosquitto__calloc(size_t nmemb, size_t size)
 {
 #ifdef REAL_WITH_MEMORY_TRACKING
@@ -76,7 +80,7 @@ void *mosquitto__calloc(size_t nmemb, size_t size)
 
 	return mem;
 }
-
+//对系统函数free的封装
 void mosquitto__free(void *mem)
 {
 #ifdef REAL_WITH_MEMORY_TRACKING
@@ -84,10 +88,11 @@ void mosquitto__free(void *mem)
 		return;
 	}
 	memcount -= malloc_usable_size(mem);
+	// printf("free %d bytes\n",malloc_usable_size(mem));
 #endif
 	free(mem);
 }
-
+//对系统函数malloc的封装
 void *mosquitto__malloc(size_t size)
 {
 #ifdef REAL_WITH_MEMORY_TRACKING
@@ -103,6 +108,7 @@ void *mosquitto__malloc(size_t size)
 		if(memcount > max_memcount){
 			max_memcount = memcount;
 		}
+		// printf("malloc %d bytes\n",malloc_usable_size(mem));
 	}
 #endif
 
@@ -120,7 +126,7 @@ unsigned long mosquitto__max_memory_used(void)
 	return max_memcount;
 }
 #endif
-
+//对系统函数realloc的封装
 void *mosquitto__realloc(void *ptr, size_t size)
 {
 #ifdef REAL_WITH_MEMORY_TRACKING
@@ -147,7 +153,7 @@ void *mosquitto__realloc(void *ptr, size_t size)
 
 	return mem;
 }
-
+//对系统函数strdup的封装
 char *mosquitto__strdup(const char *s)
 {
 #ifdef REAL_WITH_MEMORY_TRACKING
@@ -163,6 +169,7 @@ char *mosquitto__strdup(const char *s)
 		if(memcount > max_memcount){
 			max_memcount = memcount;
 		}
+		// printf("strdup %d bytes\n",malloc_usable_size(str));
 	}
 #endif
 
